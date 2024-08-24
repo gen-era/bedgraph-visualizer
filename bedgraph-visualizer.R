@@ -32,6 +32,35 @@ lrr_data <- read.table(gzfile(lrr_file), header = TRUE)
 colnames(baf_data) <- c("Chr", "Start", "End", "BAF")
 colnames(lrr_data) <- c("Chr", "Start", "End", "LRR")
 
+library(segmented)
+
+getSmoothLine <- function(LRRs, region=NULL, smoothNum = 10) {
+
+  # if (!is.null(region)){
+  #   lm_fit <- lm(LRR ~ Start, LRRs)
+  #   seg_fit <- segmented(
+  #                        lm_fit,
+  #                        seg.Z = ~Start,
+  #                        psi=list(Start=c(region$Start, region$Start + 1, region$End - 1, region$End)),
+  #                        control = seg.control(it.max = 0)
+  #   )
+  #   smoothed <- data.frame(Pos = LRRs$Start, LRR=predict(seg_fit))
+  #   return(smoothed)
+  # } else {
+    # https://github.com/gzhmat/ShinyCNV/blob/e0307df97d52f80a540e6eddbaa34df34d22e95e/config.R#L80
+  rowNum <- nrow(LRRs)
+  smoothed <- LRRs %>%
+    arrange(Start) %>%
+    mutate(smtGroup = as.integer(1:rowNum / smoothNum)) %>%
+    group_by(smtGroup) %>%
+    summarise(Pos = median(Start), LRR = median(LRR)) %>%
+    ungroup()
+
+  return(smoothed)
+  # }
+}
+
+
 # Function to plot the entire genome
 genome_plot <- function() {
   # Unique chromosomes
@@ -47,10 +76,11 @@ genome_plot <- function() {
     lrr_chr_data <- lrr_data %>% filter(Chr == chr)
     baf_chr_data <- baf_data %>% filter(Chr == chr)
 
+    smooth_line <- getSmoothLine(lrr_chr_data)
     # Create LRR plot
     lrr_plot <- ggplot(lrr_chr_data) +
       geom_point(aes(x = Start, y = LRR), color = "#2a2a2a") +
-      geom_smooth(aes(x = Start, y = LRR), se = FALSE, method = "lm", color = "#ff3333") +  # Add smooth line
+      geom_line(data = smooth_line, aes(x = Pos, y = LRR), color = "#ff3333") +  # Use the custom smooth line
       theme_minimal() +
       labs(x = NULL, y = "LRR", title = paste("chr", chr, sep="")) +
       geom_hline(yintercept = 0, linetype = "dotted", color = "#555555") +  # Guide line for LRR at y = 0
@@ -88,28 +118,32 @@ genome_plot <- function() {
 }
 
 # Function to plot specific regions
-region_plot <- function(region_file) {
+region_plot <- function(region_file, padding_percent=0.2) {
   # Load region data
   regions <- read.table(region_file, header = FALSE)
-  colnames(regions) <- c("Chr", "RegionStart", "RegionEnd", "Type")
+  colnames(regions) <- c("Chr", "Start", "End", "Type")
 
   # Iterate over each region and create plots
   for (i in 1:nrow(regions)) {
     region <- regions[i, ]
+    padding = (region$End - region$Start ) * padding_percent
+    padded_start = region$Start - padding / 2
+    padded_end = region$End + padding / 2
 
     # Filter BAF and LRR data for the current region
     filtered_baf <- baf_data %>%
-      filter(Chr == region$Chr & Start >= region$RegionStart & End <= region$RegionEnd)
+      filter(Chr == region$Chr & Start >= padded_start & Start <= padded_end)
 
     filtered_lrr <- lrr_data %>%
-      filter(Chr == region$Chr & Start >= region$RegionStart & End <= region$RegionEnd)
+      filter(Chr == region$Chr & Start >= padded_start & Start <= padded_end)
 
+    smooth_line <- getSmoothLine(filtered_lrr, region)
     # Create the LRR plot with smooth line
     lrr_plot <- ggplot(filtered_lrr) +
       geom_point(aes(x = Start, y = LRR), color = "#2a2a2a") +
-      geom_smooth(aes(x = Start, y = LRR), se = FALSE, method = "lm", color = "#ff3333") +  # Add smooth line
+      geom_line(data = smooth_line, aes(x = Pos, y = LRR), color = "#ff3333") +  # Use the custom smooth line
       theme_minimal() +
-      labs(x = NULL, y = "LRR", title = paste(region$Chr, ":", region$RegionStart, "-", region$RegionEnd, sep="")) +
+      labs(x = NULL, y = "LRR", title = paste(region$Chr, ":", region$Start, "-", region$End, sep="")) +
       geom_hline(yintercept = 0, linetype = "dotted", color = "#555555") +  # Guide line for LRR at y = 0
       coord_cartesian(ylim = c(-1, 1)) +  # Set the y-axis limits for LRR
       scale_x_continuous(labels = label_number())  # Format x-axis labels as numeric
@@ -127,7 +161,7 @@ region_plot <- function(region_file) {
     combined_plot <- plot_grid(lrr_plot, baf_plot, align = "v", ncol = 1, rel_heights = c(1, 1))
 
     # Create a filename for the current region
-    output_file <- file.path(output_dir, paste0("plot_", region$Chr, "_", region$RegionStart, "_", region$RegionEnd, ".png"))
+    output_file <- file.path(output_dir, paste0("plot_", region$Chr, "_", region$Start, "_", region$End, ".png"))
 
     # Save the combined plot to a PNG file
     ggsave(output_file, plot = combined_plot, width = 10, height = 8, dpi = 300)
