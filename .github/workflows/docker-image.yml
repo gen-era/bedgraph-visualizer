@@ -3,7 +3,7 @@ name: Docker Build
 on:
   push:
     branches:
-      - release
+      - master
   build:
     needs: test
     runs-on: ubuntu-latest
