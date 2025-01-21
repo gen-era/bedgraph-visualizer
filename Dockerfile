@@ -14,11 +14,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install required R packages
-RUN R -e "install.packages(c('ggplot2', 'dplyr', 'tidyr', 'cowplot', 'scales'), repos='http://cran.rstudio.com/')"
+RUN R -e "install.packages(c('ggplot2', 'dplyr', 'tidyr', 'cowplot', 'scales', 'segmented'), repos='http://cran.rstudio.com/')"
 
 # Copy the R script to the working directory
 COPY bedgraph-visualizer.R .
-
 
 
 # Example usage:

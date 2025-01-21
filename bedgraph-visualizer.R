@@ -118,7 +118,7 @@ genome_plot <- function() {
 }
 
 # Function to plot specific regions
-region_plot <- function(region_file, padding_percent=0.2) {
+region_plot <- function(region_file, min_padding=600000) {
   # Load region data
   regions <- read.table(region_file, header = FALSE)
   colnames(regions) <- c("Chr", "Start", "End", "Type")
@@ -126,9 +126,12 @@ region_plot <- function(region_file, padding_percent=0.2) {
   # Iterate over each region and create plots
   for (i in 1:nrow(regions)) {
     region <- regions[i, ]
-    padding = (region$End - region$Start ) * padding_percent
-    padded_start = region$Start - padding / 2
-    padded_end = region$End + padding / 2
+    padding = (region$End - region$Start )
+    if (padding <= min_padding) {
+      padding = min_padding
+    }
+    padded_start = region$Start - padding
+    padded_end = region$End + padding
 
     # Filter BAF and LRR data for the current region
     filtered_baf <- baf_data %>%
