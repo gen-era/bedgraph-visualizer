@@ -1,3 +1,5 @@
 # Example usage:
 # docker build -t my-r-script .
 # docker run --rm -v $(pwd)/output:/usr/src/app/output my-r-script BAF.bedgraph.gz LRR.bedgraph.gz regions.bed output
+
+test build
