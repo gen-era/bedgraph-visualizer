@@ -81,6 +81,10 @@ genome_plot <- function() {
     lrr_plot <- ggplot(lrr_chr_data) +
       geom_point(aes(x = Start, y = LRR), color = "#2a2a2a") +
       geom_line(data = smooth_line, aes(x = Pos, y = LRR), color = "#ff3333") +  # Use the custom smooth line
+      geom_rect(aes(xmin = min(Start), xmax = min(Start) + 100000, ymin = -Inf, ymax = Inf), 
+                fill = "yellow", alpha = 0.005) + # Highlight start of CNV region with transparent orange
+      geom_rect(aes(xmin = max(Start) - 100000, xmax = max(Start), ymin = -Inf, ymax = Inf),
+                fill = "yellow", alpha = 0.005) + # Highlight end of CNV region with transparent orange
       theme_minimal() +
       labs(x = NULL, y = "LRR", title = paste("chr", chr, sep="")) +
       geom_hline(yintercept = 0, linetype = "dotted", color = "#555555") +  # Guide line for LRR at y = 0
@@ -117,7 +121,6 @@ genome_plot <- function() {
   ggsave(output_file, plot = combined_plot, width = 30, height = 40, dpi = 300)
 }
 
-# Function to plot specific regions
 region_plot <- function(region_file, min_padding=600000) {
   # Load region data
   regions <- read.table(region_file, header = FALSE)
@@ -126,7 +129,7 @@ region_plot <- function(region_file, min_padding=600000) {
   # Iterate over each region and create plots
   for (i in 1:nrow(regions)) {
     region <- regions[i, ]
-    padding = (region$End - region$Start )
+    padding = (region$End - region$Start)
     if (padding <= min_padding) {
       padding = min_padding
     }
@@ -134,31 +137,39 @@ region_plot <- function(region_file, min_padding=600000) {
     padded_end = region$End + padding
 
     # Filter BAF and LRR data for the current region
-    filtered_baf <- baf_data %>%
+    filtered_baf <- baf_data %>% 
       filter(Chr == region$Chr & Start >= padded_start & Start <= padded_end)
 
-    filtered_lrr <- lrr_data %>%
+    filtered_lrr <- lrr_data %>% 
       filter(Chr == region$Chr & Start >= padded_start & Start <= padded_end)
 
     smooth_line <- getSmoothLine(filtered_lrr, region)
+
     # Create the LRR plot with smooth line
+    
     lrr_plot <- ggplot(filtered_lrr) +
-      geom_point(aes(x = Start, y = LRR), color = "#2a2a2a") +
-      geom_line(data = smooth_line, aes(x = Pos, y = LRR), color = "#ff3333") +  # Use the custom smooth line
+      geom_point(aes(x = Start, y = LRR), color = "#2a2a2a", size= 0.3) +
+geom_line(data = smooth_line, aes(x = Pos, y = LRR), color = "#ff3333") +  # Use the custom smooth line
       theme_minimal() +
       labs(x = NULL, y = "LRR", title = paste(region$Chr, ":", region$Start, "-", region$End, sep="")) +
       geom_hline(yintercept = 0, linetype = "dotted", color = "#555555") +  # Guide line for LRR at y = 0
       coord_cartesian(ylim = c(-1, 1)) +  # Set the y-axis limits for LRR
-      scale_x_continuous(labels = label_number())  # Format x-axis labels as numeric
+      scale_x_continuous(labels = label_number()) +  # Format x-axis labels as numeric
+      # Highlight the CNV region with more transparent orange
+      geom_rect(aes(xmin = region$Start, xmax = region$End, ymin = -Inf, ymax = Inf),
+                fill = "yellow", alpha = 0.005, inherit.aes = FALSE)  # More transparent orange rectangle
 
-    # Create the BAF plot
+    # Create the BAF plot with highlight at CNV region
     baf_plot <- ggplot(filtered_baf) +
-      geom_point(aes(x = Start, y = BAF), color = "#2a2a2a") +
+      geom_point(aes(x = Start, y = BAF), color = "#2a2a2a", size= 0.3) +
       theme_minimal() +
       labs(x = "Position", y = "BAF") +
       geom_hline(yintercept = 0.5, linetype = "dotted", color = "#555555") +  # Guide line for BAF at y = 0.5
       coord_cartesian(ylim = c(0, 1)) +
-      scale_x_continuous(labels = label_number())  # Format x-axis labels as numeric
+      scale_x_continuous(labels = label_number()) +  # Format x-axis labels as numeric
+      # Highlight the CNV region with more transparent orange
+      geom_rect(aes(xmin = region$Start, xmax = region$End, ymin = -Inf, ymax = Inf),
+                fill = "yellow", alpha = 0.005, inherit.aes = FALSE)  # More transparent orange rectangle
 
     # Combine the plots vertically
     combined_plot <- plot_grid(lrr_plot, baf_plot, align = "v", ncol = 1, rel_heights = c(1, 1))
