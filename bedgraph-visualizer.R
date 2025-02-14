@@ -35,19 +35,6 @@ colnames(lrr_data) <- c("Chr", "Start", "End", "LRR")
 library(segmented)
 
 getSmoothLine <- function(LRRs, region=NULL, smoothNum = 10) {
-
-  # if (!is.null(region)){
-  #   lm_fit <- lm(LRR ~ Start, LRRs)
-  #   seg_fit <- segmented(
-  #                        lm_fit,
-  #                        seg.Z = ~Start,
-  #                        psi=list(Start=c(region$Start, region$Start + 1, region$End - 1, region$End)),
-  #                        control = seg.control(it.max = 0)
-  #   )
-  #   smoothed <- data.frame(Pos = LRRs$Start, LRR=predict(seg_fit))
-  #   return(smoothed)
-  # } else {
-    # https://github.com/gzhmat/ShinyCNV/blob/e0307df97d52f80a540e6eddbaa34df34d22e95e/config.R#L80
   rowNum <- nrow(LRRs)
   smoothed <- LRRs %>%
     arrange(Start) %>%
@@ -57,9 +44,7 @@ getSmoothLine <- function(LRRs, region=NULL, smoothNum = 10) {
     ungroup()
 
   return(smoothed)
-  # }
 }
-
 
 # Function to plot the entire genome
 genome_plot <- function() {
@@ -80,23 +65,27 @@ genome_plot <- function() {
     # Create LRR plot
     lrr_plot <- ggplot(lrr_chr_data) +
       geom_point(aes(x = Start, y = LRR), color = "#2a2a2a") +
-      geom_line(data = smooth_line, aes(x = Pos, y = LRR), color = "#ff3333") +  # Use the custom smooth line
+      geom_line(data = smooth_line, aes(x = Pos, y = LRR), color = "#ff3333") +
+      geom_rect(aes(xmin = min(Start), xmax = min(Start) + 100000, ymin = -Inf, ymax = Inf), 
+                fill = "yellow", alpha = 0.005) +
+      geom_rect(aes(xmin = max(Start) - 100000, xmax = max(Start), ymin = -Inf, ymax = Inf),
+                fill = "yellow", alpha = 0.005) +
       theme_minimal() +
       labs(x = NULL, y = "LRR", title = paste("chr", chr, sep="")) +
-      geom_hline(yintercept = 0, linetype = "dotted", color = "#555555") +  # Guide line for LRR at y = 0
-      coord_cartesian(ylim = c(-1, 1)) +  # Set the y-axis limits for LRR
-      scale_x_continuous(labels = label_number()) +  # Format x-axis labels as numeric
-      scale_y_continuous(expand = c(0, 0))  # Avoid extra space at the plot edges
+      geom_hline(yintercept = 0, linetype = "dotted", color = "#555555") +
+      coord_cartesian(ylim = c(-1, 1)) +
+      scale_x_continuous(labels = label_number()) +
+      scale_y_continuous(expand = c(0, 0))
 
     # Create BAF plot
     baf_plot <- ggplot(baf_chr_data) +
       geom_point(aes(x = Start, y = BAF), color = "#2a2a2a") +
       theme_minimal() +
       labs(x = "Position", y = "BAF") +
-      geom_hline(yintercept = 0.5, linetype = "dotted", color = "#555555") +  # Guide line for BAF at y = 0.5
+      geom_hline(yintercept = 0.5, linetype = "dotted", color = "#555555") +
       coord_cartesian(ylim = c(0, 1)) +
-      scale_x_continuous(labels = label_number()) +  # Format x-axis labels as numeric
-      scale_y_continuous(expand = c(0, 0))  # Avoid extra space at the plot edges
+      scale_x_continuous(labels = label_number()) +
+      scale_y_continuous(expand = c(0, 0))
 
     # Store plots in lists
     lrr_plots[[chr]] <- lrr_plot
@@ -117,16 +106,31 @@ genome_plot <- function() {
   ggsave(output_file, plot = combined_plot, width = 30, height = 40, dpi = 300)
 }
 
-# Function to plot specific regions
 region_plot <- function(region_file, min_padding=600000) {
-  # Load region data
-  regions <- read.table(region_file, header = FALSE)
+  # Add tryCatch to handle potential errors when reading the region file
+  regions <- tryCatch({
+    regions_data <- read.table(region_file, header = FALSE)
+    if (nrow(regions_data) == 0) {
+      message("Region file is empty. No regions to plot.")
+      return(invisible(NULL))  # Return silently without error
+    }
+    regions_data
+  }, error = function(e) {
+    message("Error reading region file: ", e$message)
+    return(invisible(NULL))  # Return silently without error
+  })
+  
+  # If regions is NULL, return without processing further
+  if (is.null(regions)) {
+    return(invisible(NULL))
+  }
+
   colnames(regions) <- c("Chr", "Start", "End", "Type")
 
   # Iterate over each region and create plots
   for (i in 1:nrow(regions)) {
     region <- regions[i, ]
-    padding = (region$End - region$Start )
+    padding = (region$End - region$Start)
     if (padding <= min_padding) {
       padding = min_padding
     }
@@ -134,31 +138,36 @@ region_plot <- function(region_file, min_padding=600000) {
     padded_end = region$End + padding
 
     # Filter BAF and LRR data for the current region
-    filtered_baf <- baf_data %>%
+    filtered_baf <- baf_data %>% 
       filter(Chr == region$Chr & Start >= padded_start & Start <= padded_end)
 
-    filtered_lrr <- lrr_data %>%
+    filtered_lrr <- lrr_data %>% 
       filter(Chr == region$Chr & Start >= padded_start & Start <= padded_end)
 
     smooth_line <- getSmoothLine(filtered_lrr, region)
+
     # Create the LRR plot with smooth line
     lrr_plot <- ggplot(filtered_lrr) +
-      geom_point(aes(x = Start, y = LRR), color = "#2a2a2a") +
-      geom_line(data = smooth_line, aes(x = Pos, y = LRR), color = "#ff3333") +  # Use the custom smooth line
+      geom_point(aes(x = Start, y = LRR), color = "#2a2a2a", size= 0.3) +
+      geom_line(data = smooth_line, aes(x = Pos, y = LRR), color = "#ff3333") +
       theme_minimal() +
       labs(x = NULL, y = "LRR", title = paste(region$Chr, ":", region$Start, "-", region$End, sep="")) +
-      geom_hline(yintercept = 0, linetype = "dotted", color = "#555555") +  # Guide line for LRR at y = 0
-      coord_cartesian(ylim = c(-1, 1)) +  # Set the y-axis limits for LRR
-      scale_x_continuous(labels = label_number())  # Format x-axis labels as numeric
+      geom_hline(yintercept = 0, linetype = "dotted", color = "#555555") +
+      coord_cartesian(ylim = c(-1, 1)) +
+      scale_x_continuous(labels = label_number()) +
+      geom_rect(aes(xmin = region$Start, xmax = region$End, ymin = -Inf, ymax = Inf),
+                fill = "yellow", alpha = 0.005, inherit.aes = FALSE)
 
-    # Create the BAF plot
+    # Create the BAF plot with highlight at CNV region
     baf_plot <- ggplot(filtered_baf) +
-      geom_point(aes(x = Start, y = BAF), color = "#2a2a2a") +
+      geom_point(aes(x = Start, y = BAF), color = "#2a2a2a", size= 0.3) +
       theme_minimal() +
       labs(x = "Position", y = "BAF") +
-      geom_hline(yintercept = 0.5, linetype = "dotted", color = "#555555") +  # Guide line for BAF at y = 0.5
+      geom_hline(yintercept = 0.5, linetype = "dotted", color = "#555555") +
       coord_cartesian(ylim = c(0, 1)) +
-      scale_x_continuous(labels = label_number())  # Format x-axis labels as numeric
+      scale_x_continuous(labels = label_number()) +
+      geom_rect(aes(xmin = region$Start, xmax = region$End, ymin = -Inf, ymax = Inf),
+                fill = "yellow", alpha = 0.005, inherit.aes = FALSE)
 
     # Combine the plots vertically
     combined_plot <- plot_grid(lrr_plot, baf_plot, align = "v", ncol = 1, rel_heights = c(1, 1))
